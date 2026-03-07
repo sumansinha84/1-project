@@ -29,11 +29,13 @@ if (SMTP_HOST && SMTP_USER && SMTP_PASS) {
 }
 
 const app = express();
-const dbPath = path.join(__dirname, 'data', 'app.db');
+const fs = require('fs');
+const isVercel = Boolean(process.env.VERCEL);
+const dataDir = isVercel ? require('os').tmpdir() : path.join(__dirname, 'data');
+const dbPath = path.join(dataDir, 'app.db');
 let db;
 try {
-  const fs = require('fs');
-  fs.mkdirSync(path.join(__dirname, 'data'), { recursive: true });
+  if (!isVercel) fs.mkdirSync(path.join(__dirname, 'data'), { recursive: true });
   db = new Database(dbPath);
   db.exec(`
     CREATE TABLE IF NOT EXISTS issues (
@@ -42,6 +44,7 @@ try {
       description TEXT NOT NULL,
       context TEXT,
       user_agent TEXT,
+      attachment TEXT,
       created_at TEXT DEFAULT (datetime('now'))
     );
     CREATE TABLE IF NOT EXISTS users (
@@ -67,15 +70,49 @@ try {
       token TEXT UNIQUE NOT NULL,
       expires_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS activity_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER,
+      endpoint TEXT NOT NULL,
+      method TEXT NOT NULL,
+      status_code INTEGER,
+      ip TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
   `);
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0`);
+  } catch (_) {
+    // Column may already exist
+  }
+  const adminEmail = 'sumansinha.nl@gmail.com';
+  const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(adminEmail);
+  if (existing) {
+    db.prepare('UPDATE users SET is_admin = 1 WHERE email = ?').run(adminEmail);
+  } else {
+    db.prepare('INSERT INTO users (email, is_admin) VALUES (?, 1)').run(adminEmail);
+  }
 } catch (err) {
   // eslint-disable-next-line no-console
   console.warn('SQLite init failed:', err.message, '- issue reporting will fail');
   db = null;
 }
+if (db) {
+  try {
+    db.exec('ALTER TABLE issues ADD COLUMN attachment TEXT');
+  } catch (e) {
+    // Column already exists
+  }
+}
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname)));
+// Serve app at root (local dev; on Vercel, public/index.html is served for /)
+if (!isVercel) {
+  app.get('/', (_req, res) => {
+    res.sendFile(path.join(__dirname, 'landing.html'));
+  });
+  app.use(express.static(path.join(__dirname)));
+}
 
 const PORT = process.env.PORT || 4000;
 const OPENCAGE_API_KEY = process.env.OPENCAGE_API_KEY;
@@ -450,9 +487,10 @@ function buildNearbyResults(productSummaries, lat, lon, radiusKm) {
   return combined.slice(0, 4);
 }
 
-// Report an issue
+// Report an issue (optional attachment: base64 image string or data URL, max ~1.5MB)
+const MAX_ATTACHMENT_LENGTH = 2000000;
 app.post('/api/issues', (req, res) => {
-  const { type, description, context, user_agent } = req.body || {};
+  const { type, description, context, user_agent, attachment } = req.body || {};
   const t = (type || '').toString().trim();
   const d = (description || '').toString().trim();
   if (!t || !d) {
@@ -461,11 +499,18 @@ app.post('/api/issues', (req, res) => {
   if (!db) {
     return res.status(503).json({ error: 'Issue reporting is temporarily unavailable.' });
   }
+  let attachmentVal = null;
+  if (attachment && typeof attachment === 'string') {
+    const base64 = attachment.replace(/^data:image\/[a-z]+;base64,/, '').trim();
+    if (base64.length > 0 && base64.length <= MAX_ATTACHMENT_LENGTH) {
+      attachmentVal = 'data:image/png;base64,' + base64;
+    }
+  }
   try {
     const stmt = db.prepare(
-      'INSERT INTO issues (type, description, context, user_agent) VALUES (?, ?, ?, ?)',
+      'INSERT INTO issues (type, description, context, user_agent, attachment) VALUES (?, ?, ?, ?, ?)',
     );
-    const info = stmt.run(t, d, (context || '').toString().trim(), (user_agent || '').toString().trim());
+    const info = stmt.run(t, d, (context || '').toString().trim(), (user_agent || '').toString().trim(), attachmentVal);
     res.status(201).json({ id: info.lastInsertRowid });
   } catch (err) {
     // eslint-disable-next-line no-console
@@ -486,6 +531,55 @@ function getUserIdFromToken(token) {
     return null;
   }
 }
+
+function getAuthenticatedUser(token) {
+  if (!db || !token) return null;
+  try {
+    const sessionRow = db.prepare(
+      "SELECT user_id FROM sessions WHERE token = ? AND datetime(expires_at) > datetime('now')",
+    ).get(sha256(token.trim()));
+    if (!sessionRow) return null;
+    const user = db.prepare('SELECT id, email, is_admin FROM users WHERE id = ?').get(sessionRow.user_id);
+    return user || null;
+  } catch {
+    return null;
+  }
+}
+
+function requireAdmin(req, res, next) {
+  const auth = req.headers.authorization;
+  const token = auth && auth.startsWith('Bearer ') ? auth.slice(7) : null;
+  const user = getAuthenticatedUser(token);
+  if (!user) return res.status(401).json({ error: 'Not authenticated.' });
+  if (user.is_admin !== 1) return res.status(403).json({ error: 'Admin access required.' });
+  req.adminUser = user;
+  next();
+}
+
+function requestLogger(req, res, next) {
+  if (req.path === '/api/health') return next();
+  const start = Date.now();
+  res.on('finish', () => {
+    if (!db) return;
+    try {
+      const auth = req.headers.authorization;
+      const token = auth && auth.startsWith('Bearer ') ? auth.slice(7) : null;
+      const userId = getUserIdFromToken(token);
+      const ip = req.ip || req.socket?.remoteAddress || null;
+      db.prepare(
+        'INSERT INTO activity_log (user_id, endpoint, method, status_code, ip) VALUES (?, ?, ?, ?, ?)',
+      ).run(
+        userId ?? null,
+        req.originalUrl || req.path,
+        req.method,
+        res.statusCode,
+        ip,
+      );
+    } catch (_) {}
+  });
+  next();
+}
+app.use('/api', requestLogger);
 
 // Send magic code to email (uses SMTP if configured, else logs to console)
 app.post('/api/auth/send-code', async (req, res) => {
@@ -518,9 +612,17 @@ app.post('/api/auth/send-code', async (req, res) => {
       } catch (mailErr) {
         // eslint-disable-next-line no-console
         console.error('[Auth] Send mail failed:', mailErr.message);
+        if (process.env.NODE_ENV !== 'production') {
+          // Development fallback: log code to console so login still works when SMTP is misconfigured
+          // eslint-disable-next-line no-console
+          console.log('[Auth] Magic code for', email, ':', code, '(SMTP failed — use this code to log in)');
+          return res.json({
+            ok: true,
+            message: 'SMTP failed. Check the server terminal for your one-time code and enter it below.',
+          });
+        }
         return res.status(500).json({
           error: 'Could not send email. Check server SMTP settings or try again later.',
-          devHint: process.env.NODE_ENV !== 'production' ? 'Code logged in server console.' : undefined,
         });
       }
     }
@@ -591,9 +693,195 @@ app.get('/api/me', (req, res) => {
   if (!userId || !db) {
     return res.status(401).json({ error: 'Not authenticated.' });
   }
-  const user = db.prepare('SELECT id, email FROM users WHERE id = ?').get(userId);
+  const user = db.prepare('SELECT id, email, is_admin FROM users WHERE id = ?').get(userId);
   if (!user) return res.status(401).json({ error: 'Not authenticated.' });
-  res.json({ user: { id: user.id, email: user.email } });
+  res.json({
+    user: {
+      id: user.id,
+      email: user.email,
+      is_admin: user.is_admin === 1,
+    },
+  });
+});
+
+// ----- Admin API (all require admin) -----
+app.get('/api/admin/users', requireAdmin, (req, res) => {
+  if (!db) return res.status(503).json({ error: 'Service unavailable.' });
+  try {
+    const users = db.prepare(`
+      SELECT u.id, u.email, u.created_at,
+        (SELECT COUNT(*) FROM sessions s WHERE s.user_id = u.id AND datetime(s.expires_at) > datetime('now')) AS session_count,
+        (SELECT MIN(s.expires_at) FROM sessions s WHERE s.user_id = u.id) AS first_seen,
+        (SELECT MAX(s.expires_at) FROM sessions s WHERE s.user_id = u.id) AS last_seen
+      FROM users u
+      ORDER BY u.created_at DESC
+    `).all();
+    const now = new Date().toISOString().slice(0, 10);
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const total = users.length;
+    const today = users.filter((u) => (u.created_at || '').toString().slice(0, 10) === now).length;
+    const thisWeek = users.filter((u) => (u.created_at || '').toString().slice(0, 10) >= weekAgo).length;
+    const thisMonth = users.filter((u) => (u.created_at || '').toString().slice(0, 10) >= monthAgo).length;
+    res.json({
+      total,
+      today,
+      thisWeek,
+      thisMonth,
+      users: users.map((u) => ({
+        id: u.id,
+        email: u.email,
+        created_at: u.created_at,
+        session_count: u.session_count || 0,
+        first_seen: u.first_seen || null,
+        last_seen: u.last_seen || null,
+      })),
+    });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch users.' });
+  }
+});
+
+app.get('/api/admin/usage', requireAdmin, (req, res) => {
+  if (!db) return res.status(503).json({ error: 'Service unavailable.' });
+  try {
+    const totalRequests = db.prepare('SELECT COUNT(*) AS n FROM activity_log').get().n;
+    const todayStart = new Date().toISOString().slice(0, 10) + 'T00:00:00.000Z';
+    const requestsToday = db.prepare(
+      "SELECT COUNT(*) AS n FROM activity_log WHERE created_at >= ?",
+    ).get(todayStart).n;
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const activeUsersLast7 = db.prepare(
+      "SELECT COUNT(DISTINCT user_id) AS n FROM activity_log WHERE created_at >= ? AND user_id IS NOT NULL",
+    ).get(sevenDaysAgo).n;
+    const byDay = db.prepare(`
+      SELECT date(created_at) AS day, COUNT(*) AS count
+      FROM activity_log
+      WHERE created_at >= date('now', '-14 days')
+      GROUP BY date(created_at)
+      ORDER BY day ASC
+    `).all();
+    const topEndpoints = db.prepare(`
+      SELECT endpoint, method, COUNT(*) AS count
+      FROM activity_log
+      GROUP BY endpoint, method
+      ORDER BY count DESC
+      LIMIT 5
+    `).all();
+    const userSpans = db.prepare(`
+      SELECT user_id, MIN(created_at) AS first_at, MAX(created_at) AS last_at
+      FROM activity_log
+      WHERE user_id IS NOT NULL
+      GROUP BY user_id
+    `).all();
+    let avgSessionMinutes = 0;
+    if (userSpans.length > 0) {
+      let totalMs = 0;
+      for (const row of userSpans) {
+        const first = new Date(row.first_at).getTime();
+        const last = new Date(row.last_at).getTime();
+        if (Number.isFinite(first) && Number.isFinite(last) && last >= first) {
+          totalMs += (last - first) / (60 * 1000);
+        }
+      }
+      avgSessionMinutes = Math.round(totalMs / userSpans.length);
+    }
+    res.json({
+      totalRequests,
+      requestsToday,
+      activeUsersLast7,
+      byDay,
+      topEndpoints,
+      avgSessionMinutes: Math.round(avgSessionMinutes),
+    });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch usage.' });
+  }
+});
+
+app.get('/api/admin/reports/registrations', requireAdmin, (req, res) => {
+  if (!db) return res.status(503).json({ error: 'Service unavailable.' });
+  try {
+    const from = (req.query.from || '').toString().slice(0, 10) || new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const to = (req.query.to || '').toString().slice(0, 10) || new Date().toISOString().slice(0, 10);
+    const rows = db.prepare(`
+      SELECT date(created_at) AS registration_date, COUNT(*) AS count
+      FROM users
+      WHERE date(created_at) >= ? AND date(created_at) <= ?
+      GROUP BY date(created_at)
+      ORDER BY registration_date DESC
+    `).all(from, to);
+    res.json({ from, to, byDate: rows });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch report.' });
+  }
+});
+
+app.get('/api/admin/reports/registrations/:date', requireAdmin, (req, res) => {
+  if (!db) return res.status(503).json({ error: 'Service unavailable.' });
+  const date = (req.params.date || '').toString().slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return res.status(400).json({ error: 'Invalid date format (use YYYY-MM-DD).' });
+  }
+  try {
+    const users = db.prepare(`
+      SELECT id, email, created_at
+      FROM users
+      WHERE date(created_at) = ?
+      ORDER BY created_at ASC
+    `).all(date);
+    res.json({ date, users });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch users for date.' });
+  }
+});
+
+app.get('/api/admin/issues', requireAdmin, (req, res) => {
+  if (!db) return res.status(503).json({ error: 'Service unavailable.' });
+  try {
+    const typeFilter = (req.query.type || '').toString().trim().toLowerCase();
+    let rows = db.prepare(
+      `SELECT id, type, description, context, user_agent, created_at,
+       (CASE WHEN attachment IS NOT NULL AND length(attachment) > 0 THEN 1 ELSE 0 END) as has_attachment
+       FROM issues ORDER BY created_at DESC`,
+    ).all();
+    if (typeFilter) {
+      rows = rows.filter((r) => (r.type || '').toLowerCase() === typeFilter);
+    }
+    res.json({ issues: rows });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch issues.' });
+  }
+});
+
+app.get('/api/admin/issues/:id/attachment', requireAdmin, (req, res) => {
+  if (!db) return res.status(503).end();
+  try {
+    const id = parseInt(req.params.id, 10);
+    const row = db.prepare('SELECT attachment FROM issues WHERE id = ?').get(id);
+    if (!row || !row.attachment) return res.status(404).end();
+    const dataUrl = row.attachment;
+    const match = dataUrl.match(/^data:(image\/[a-z]+);base64,(.+)$/);
+    if (!match) return res.status(400).end();
+    const contentType = match[1];
+    const buf = Buffer.from(match[2], 'base64');
+    res.setHeader('Content-Type', contentType);
+    res.send(buf);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(err);
+    res.status(500).end();
+  }
 });
 
 // Health check
@@ -689,8 +977,12 @@ app.get('/api/compare', (req, res, next) => {
   }
 });
 
-app.listen(PORT, () => {
-  // eslint-disable-next-line no-console
-  console.log(`Backend listening on http://localhost:${PORT}`);
-});
+if (!isVercel) {
+  app.listen(PORT, () => {
+    // eslint-disable-next-line no-console
+    console.log(`Backend listening on http://localhost:${PORT}`);
+  });
+}
+
+module.exports = app;
 

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+  <!-- Basket -->
+  <path d="M8 20h32l-3 14H11L8 20z" fill="#15803d"/>
+  <path d="M14 18l2-6h16l2 6" stroke="#166534" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <!-- Price tag -->
+  <path d="M32 8l8 8-12 12-8-8 12-12z" fill="#fef9c3"/>
+  <text x="34" y="18" font-size="8" font-weight="bold" fill="#15803d" font-family="system-ui,sans-serif">€</text>
+</svg>
