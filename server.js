@@ -725,29 +725,9 @@ async function geocodeLocation(query) {
   const local = geocodeLocationLocal(query);
   if (local) return local;
 
-  if (!OPENCAGE_API_KEY) {
-    throw new Error('Location not recognised. Try a Dutch city name (e.g. Amsterdam, Utrecht) or postcode.');
-  }
-
-  const url = new URL('https://api.opencagedata.com/geocode/v1/json');
-  url.searchParams.set('q', query);
-  url.searchParams.set('key', OPENCAGE_API_KEY);
-  url.searchParams.set('limit', '1');
-  url.searchParams.set('countrycode', 'nl');
-  url.searchParams.set('no_annotations', '1');
-
-  const response = await fetch(url.toString());
-  if (!response.ok) {
-    throw new Error(`OpenCage request failed with status ${response.status}`);
-  }
-
-  const data = await response.json();
-  if (!data.results || !data.results.length) {
-    throw new Error('No coordinates found for this location.');
-  }
-
-  const { lat, lng } = data.results[0].geometry;
-  return { lat, lon: lng };
+  // For demo-only mode we do **not** call any external geocoding API.
+  // If the local postcode/city lookup fails, surface a friendly error.
+  throw new Error('Location not recognised. Try a Dutch city name or 4-digit postcode (e.g. 3454, Utrecht, De Meern).');
 }
 
 async function runApifyActor(query, maxResults = 80) {
