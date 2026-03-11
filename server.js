@@ -834,6 +834,7 @@ function summarisePricesFromApify(items, query) {
 
 function buildNearbyResults(productSummaries, lat, lon, radiusKm) {
   const withStores = [];
+  const MAX_RESULTS = 9;
 
   for (const summary of productSummaries) {
     const candidates = STORES.filter(
@@ -881,15 +882,15 @@ function buildNearbyResults(productSummaries, lat, lon, radiusKm) {
     (r) => r.distanceKm <= radiusKm,
   );
 
-  if (withinRadius.length >= 4) {
-    return withinRadius.slice(0, 4);
+  if (withinRadius.length >= MAX_RESULTS) {
+    return withinRadius.slice(0, MAX_RESULTS);
   }
 
   const outsideRadius = withStores.filter(
     (r) => r.distanceKm > radiusKm,
   );
   const combined = withinRadius.concat(outsideRadius);
-  return combined.slice(0, 4);
+  return combined.slice(0, MAX_RESULTS);
 }
 
 // Report an issue (optional attachment: base64 image string or data URL, max ~1.5MB)
@@ -1017,27 +1018,19 @@ app.post('/api/auth/send-code', async (req, res) => {
       } catch (mailErr) {
         // eslint-disable-next-line no-console
         console.error('[Auth] Send mail failed:', mailErr.message);
-        if (process.env.NODE_ENV !== 'production') {
-          // Development fallback: log code to console so login still works when SMTP is misconfigured
-          // eslint-disable-next-line no-console
-          console.log('[Auth] Magic code for', email, ':', code, '(SMTP failed — use this code to log in)');
-          return res.json({
-            ok: true,
-            message: 'SMTP failed. Check the server terminal for your one-time code and enter it below.',
-          });
-        }
-        return res.status(500).json({
-          error: 'Could not send email. Check server SMTP settings or try again later.',
-        });
+        // Fall through to demo/fallback flow below.
       }
     }
 
-    // No SMTP configured: log code to server console for dev/testing
+    // Demo / fallback mode: do **not** require any third‑party email access.
+    // Surface the 6‑digit code directly in the API response so users can log in
+    // without configuring SMTP (useful for personal/demo deployments).
     // eslint-disable-next-line no-console
-    console.log('[Auth] Magic code for', email, ':', code, '(configure SMTP in .env to send real emails)');
-    res.json({
+    console.log('[Auth] Magic code for', email, ':', code, '(shown in API response; SMTP disabled or failed)');
+    return res.json({
       ok: true,
-      message: 'No email server configured. Code is in the server console. Add SMTP_* to .env to send emails.',
+      message: 'Email sending is disabled for this demo deployment. Use the code shown below to log in.',
+      code,
     });
   } catch (err) {
     // eslint-disable-next-line no-console

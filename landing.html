@@ -405,10 +405,15 @@
         background: #ddd6fe; color: #4c1d95;
         font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em;
       }
+      .strip-card--cheapest {
+        background: linear-gradient(135deg, #022c22, #064e3b);
+        border: 1px solid #22c55e;
+        box-shadow: 0 8px 24px rgba(16, 185, 129, 0.35);
+      }
       .right-note { font-size: 11px; color: #9ca3af; margin-top: 10px; }
       .empty-state { font-size: 13px; color: #6b7280; padding: 16px 0; grid-column: 1 / -1; }
       .strip-card { cursor: pointer; transition: transform .15s, box-shadow .15s; }
-      .strip-card:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(15,23,42,.2); }
+      .strip-card:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(15,23,42,.2); filter: brightness(1.08); }
       .strip-card-hint { font-size: 9px; color: #9ca3af; margin-top: 4px; letter-spacing:.02em; }
       /* ── Modal ─────────────────────────────────────────── */
       .modal-overlay {
@@ -3390,7 +3395,8 @@
         var showBadge  = bestPrice < maxPrice; // Only badge when prices genuinely differ
         results.forEach(function(shop) {
           var card = document.createElement('article');
-          card.className = 'strip-card';
+          var isCheapest = shop.price === bestPrice && showBadge;
+          card.className = 'strip-card' + (isCheapest ? ' strip-card--cheapest' : '');
           card.title = 'Click for more options';
 
           // Click → open modal
@@ -3643,9 +3649,8 @@
                          unit:s.unit || '', source:'live' };
               }).sort(function(a,b) {
                 if (smFilter) return a.distanceKm - b.distanceKm;
-                var ra = CHAIN_RANK[a.chain] || 99;
-                var rb = CHAIN_RANK[b.chain] || 99;
-                return ra !== rb ? ra - rb : a.distanceKm - b.distanceKm;
+                if (a.price !== b.price) return a.price - b.price;
+                return a.distanceKm - b.distanceKm;
               });
               if (mapped.length) {
                 AUTH.recordSearch();
@@ -3724,6 +3729,7 @@
 
         } else {
           /* ── Compare mode: 1 closest per chain ── */
+          var MAX_COMPARE_RESULTS = 9;
           var byChain = {};
           STORES.forEach(function(s) {
             var d = haversineKm(center.lat, center.lon, s.lat, s.lon);
@@ -3734,16 +3740,16 @@
           var withinR  = all.filter(function(e) { return e.d <= radius; });
           var outsideR = all.filter(function(e) { return e.d >  radius; });
 
-          if (withinR.length >= 4) {
+          if (withinR.length >= MAX_COMPARE_RESULTS) {
             showList = withinR;
             statusNote = withinR.length + ' supermarket(s) within ' + radius + ' km — demo prices.';
           } else if (withinR.length > 0) {
-            var needed = Math.min(4, all.length) - withinR.length;
+            var needed = Math.min(MAX_COMPARE_RESULTS, all.length) - withinR.length;
             showList = withinR.concat(outsideR.slice(0, needed));
             statusNote = withinR.length + ' within ' + radius + ' km. Showing ' + showList.length + ' closest — demo prices.';
           } else if (all.length > 0) {
-            showList = all.slice(0, 4);
-            statusNote = 'No stores within ' + radius + ' km. Nearest is ' + showList[0].d.toFixed(1) + ' km away. Showing closest 4 — demo prices.';
+            showList = all.slice(0, MAX_COMPARE_RESULTS);
+            statusNote = 'No stores within ' + radius + ' km. Nearest is ' + showList[0].d.toFixed(1) + ' km away. Showing closest ' + showList.length + ' — demo prices.';
           } else {
             setStatus('No stores found. Try widening the radius.', 'error');
             renderResults([], itemKey);
@@ -4006,11 +4012,20 @@
           })
           .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
           .then(function(o) {
-            statusEl.textContent = o.ok
-              ? (o.data.message || 'Code sent! Check your inbox.')
-              : (o.data.error   || 'Failed to send code. Please try again.');
-            statusEl.style.color = o.ok ? 'var(--grocery-green)' : '#b91c1c';
-            if (o.ok && onOk) onOk();
+            if (o.ok) {
+              // If backend returns the code (demo mode), show it so user can log in without email.
+              if (o.data && o.data.code) {
+                statusEl.textContent = (o.data.message || 'Use this code to log in:') +
+                  ' Code: ' + (o.data.code || '').replace(/(.{3})/g, '$1 ').trim();
+              } else {
+                statusEl.textContent = o.data.message || 'Code sent! Check your inbox.';
+              }
+              statusEl.style.color = 'var(--grocery-green)';
+              if (onOk) onOk();
+            } else {
+              statusEl.textContent = (o.data && o.data.error) || 'Failed to send code. Please try again.';
+              statusEl.style.color = '#b91c1c';
+            }
           })
           .catch(function() {
             statusEl.textContent = 'Network error. Please try again.';
