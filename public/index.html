@@ -316,8 +316,27 @@
         font-weight: 600; cursor: pointer;
       }
       .cta:hover { filter: brightness(1.05); }
-      #search-button { background: #FF6600; }
-      #search-button:hover { filter: brightness(1.08); }
+      #search-button {
+        background: #FF6600;
+        font-size: 17px;
+        padding: 16px 32px;
+        gap: 10px;
+        box-shadow: 0 4px 18px rgba(255,102,0,0.45);
+        transition: transform .15s ease, box-shadow .15s ease, filter .15s ease;
+        letter-spacing: .01em;
+      }
+      #search-button:hover {
+        filter: brightness(1.08);
+        transform: translateY(-2px);
+        box-shadow: 0 7px 24px rgba(255,102,0,0.55);
+      }
+      #search-button:active {
+        transform: translateY(0);
+        box-shadow: 0 3px 10px rgba(255,102,0,0.35);
+      }
+      #search-button .bullet {
+        width: 8px; height: 8px;
+      }
       .cta .bullet {
         display: inline-block; width: 5px; height: 5px;
         border-radius: 999px; background: var(--grocery-warm-light);
