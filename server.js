@@ -273,6 +273,135 @@ const STORES = [
   },
 ];
 
+// ── Demo pricing ─────────────────────────────────────────────────────────────
+// English → Dutch product name aliases (matches landing.html EN_TO_NL)
+const EN_TO_NL_MAP = {
+  potato:'aardappel', carrot:'wortel', cucumber:'komkommer',
+  tomato:'tomaat', onion:'ui', broccoli:'broccoli', spinach:'spinazie',
+  cauliflower:'bloemkool', mushroom:'champignon', garlic:'knoflook',
+  apple:'appel', pear:'peer', banana:'banaan', orange:'sinaasappel',
+  lemon:'citroen', lime:'limoen', strawberry:'aardbei', grape:'druif',
+  mango:'mango', pineapple:'ananas', kiwi:'kiwi', watermelon:'watermeloen',
+  peach:'perzik', milk:'melk', cheese:'kaas', eggs:'eieren', egg:'eieren',
+  butter:'boter', yogurt:'yoghurt', cream:'slagroom',
+  bread:'brood', rice:'rijst', pasta:'pasta', flour:'bloem',
+  sugar:'suiker', salt:'zout', oil:'olie',
+  chicken:'kipfilet', beef:'rundergehakt', ham:'ham', salmon:'zalm',
+  tuna:'tonijn', coffee:'koffie', tea:'thee', juice:'sap',
+  water:'water', beer:'bier', wine:'wijn',
+  chips:'chips', chocolate:'chocolade', icecream:'ijs', fries:'friet',
+};
+
+// Base prices per Dutch product key (matches landing.html PRICES base values)
+const DEMO_PRICES_BASE = {
+  aardappel:{base:1.39,unit:'per kg'},      wortel:{base:0.99,unit:'per 500g'},
+  komkommer:{base:0.69,unit:'per stuk'},    tomaat:{base:1.19,unit:'per 500g'},
+  paprika:{base:0.79,unit:'per stuk'},      ui:{base:0.79,unit:'per kg'},
+  broccoli:{base:0.99,unit:'per stuk'},     spinazie:{base:1.19,unit:'per 250g'},
+  bloemkool:{base:1.29,unit:'per stuk'},    champignon:{base:1.49,unit:'per 500g'},
+  knoflook:{base:0.59,unit:'per bol'},      courgette:{base:0.89,unit:'per stuk'},
+  prei:{base:0.79,unit:'per stuk'},         pompoen:{base:1.49,unit:'per stuk'},
+  appel:{base:0.35,unit:'per stuk'},        peer:{base:0.39,unit:'per stuk'},
+  banaan:{base:0.22,unit:'per stuk'},       sinaasappel:{base:0.45,unit:'per stuk'},
+  citroen:{base:0.35,unit:'per stuk'},      aardbei:{base:2.49,unit:'per 400g'},
+  druif:{base:2.29,unit:'per 500g'},        mango:{base:0.99,unit:'per stuk'},
+  ananas:{base:1.49,unit:'per stuk'},       kiwi:{base:0.39,unit:'per stuk'},
+  watermeloen:{base:3.99,unit:'per stuk'},  perzik:{base:0.69,unit:'per stuk'},
+  melk:{base:1.05,unit:'per liter'},        kaas:{base:2.39,unit:'per 500g'},
+  eieren:{base:2.69,unit:'per 10 st'},      yoghurt:{base:0.79,unit:'per 500g'},
+  boter:{base:2.19,unit:'per 250g'},        slagroom:{base:0.99,unit:'per 250ml'},
+  karnemelk:{base:0.89,unit:'per liter'},   kwark:{base:1.19,unit:'per 500g'},
+  brood:{base:1.79,unit:'per brood'},       beschuit:{base:1.29,unit:'per pak'},
+  crackers:{base:1.49,unit:'per pak'},      croissant:{base:1.89,unit:'per 6 st'},
+  kipfilet:{base:4.99,unit:'per 500g'},     kippendijen:{base:3.99,unit:'per kg'},
+  gehakt:{base:3.49,unit:'per 500g'},       rundergehakt:{base:4.49,unit:'per 500g'},
+  ham:{base:1.49,unit:'per 150g'},          spek:{base:1.89,unit:'per 150g'},
+  worst:{base:1.69,unit:'per 250g'},        rookworst:{base:2.49,unit:'per 300g'},
+  zalm:{base:3.99,unit:'per 200g'},         tonijn:{base:1.29,unit:'per blikje'},
+  vissticks:{base:2.49,unit:'per 250g'},    garnalen:{base:3.49,unit:'per 150g'},
+  koffie:{base:3.99,unit:'per 500g'},       thee:{base:1.79,unit:'per 40 st'},
+  frisdrank:{base:0.99,unit:'per 1.5L'},    cola:{base:1.09,unit:'per 1.5L'},
+  water:{base:0.49,unit:'per 1.5L'},        sap:{base:1.29,unit:'per liter'},
+  appelsap:{base:1.29,unit:'per liter'},    bier:{base:1.09,unit:'per fles'},
+  wijn:{base:4.99,unit:'per fles'},
+  rijst:{base:1.79,unit:'per kg'},          pasta:{base:0.99,unit:'per 500g'},
+  macaroni:{base:0.89,unit:'per 500g'},     bloem:{base:0.89,unit:'per kg'},
+  suiker:{base:1.19,unit:'per kg'},         zout:{base:0.59,unit:'per 500g'},
+  olie:{base:2.29,unit:'per liter'},        olijfolie:{base:3.99,unit:'per 500ml'},
+  mayonaise:{base:1.79,unit:'per pot'},     ketchup:{base:1.29,unit:'per fles'},
+  mosterd:{base:0.99,unit:'per pot'},       pindakaas:{base:2.29,unit:'per pot'},
+  jam:{base:1.79,unit:'per pot'},           hagelslag:{base:1.49,unit:'per pak'},
+  soep:{base:1.29,unit:'per pak'},
+  chips:{base:1.49,unit:'per zak'},         koek:{base:1.49,unit:'per pak'},
+  chocolade:{base:1.69,unit:'per reep'},    noten:{base:2.49,unit:'per 200g'},
+  diepvriesgroenten:{base:1.29,unit:'per 450g'}, friet:{base:1.49,unit:'per kg'},
+  pizza:{base:2.49,unit:'per stuk'},        ijs:{base:3.29,unit:'per 900ml'},
+  shampoo:{base:2.99,unit:'per fles'},      tandpasta:{base:1.99,unit:'per tube'},
+  zeep:{base:0.99,unit:'per stuk'},         douchegel:{base:1.99,unit:'per fles'},
+  deodorant:{base:2.49,unit:'per stuk'},    wasmiddel:{base:6.99,unit:'per 25 beurt'},
+  afwasmiddel:{base:1.49,unit:'per fles'},  wc_papier:{base:3.49,unit:'per 8 rol'},
+};
+
+// Per-chain price multipliers (matches landing.html CF)
+const CHAIN_FACTORS = {
+  'Albert Heijn': 1.00, 'Jumbo': 0.97, 'Lidl': 0.87, 'Aldi': 0.85,
+  'Dirk': 0.88, 'Plus': 0.99, 'SPAR': 1.12, 'Hoogvliet': 0.95,
+  'DekaMarkt': 0.97, 'Vomar': 0.92, 'Poiesz': 0.96,
+};
+
+// Local Dutch city/postcode geocoding — no external API needed
+const CITY_COORDS_LOCAL = {
+  amsterdam:    { lat: 52.3676, lon: 4.9041 },
+  rotterdam:    { lat: 51.9225, lon: 4.4792 },
+  utrecht:      { lat: 52.0907, lon: 5.1214 },
+  'den haag':   { lat: 52.0705, lon: 4.3007 },
+  'the hague':  { lat: 52.0705, lon: 4.3007 },
+  'haag':       { lat: 52.0705, lon: 4.3007 },
+  eindhoven:    { lat: 51.4416, lon: 5.4697 },
+  tilburg:      { lat: 51.5555, lon: 5.0913 },
+  groningen:    { lat: 53.2194, lon: 6.5665 },
+  almere:       { lat: 52.3508, lon: 5.2647 },
+  breda:        { lat: 51.5719, lon: 4.7683 },
+  nijmegen:     { lat: 51.8426, lon: 5.8546 },
+  haarlem:      { lat: 52.3874, lon: 4.6462 },
+  enschede:     { lat: 52.2215, lon: 6.8937 },
+  arnhem:       { lat: 51.9851, lon: 5.8987 },
+  zaandam:      { lat: 52.4390, lon: 4.8313 },
+  amersfoort:   { lat: 52.1561, lon: 5.3878 },
+  apeldoorn:    { lat: 52.2112, lon: 5.9699 },
+  dordrecht:    { lat: 51.8133, lon: 4.6901 },
+  leiden:       { lat: 52.1601, lon: 4.4970 },
+  maastricht:   { lat: 50.8514, lon: 5.6909 },
+  delft:        { lat: 52.0116, lon: 4.3571 },
+  alkmaar:      { lat: 52.6324, lon: 4.7534 },
+  deventer:     { lat: 52.2552, lon: 6.1638 },
+  leeuwarden:   { lat: 53.2012, lon: 5.7999 },
+  zwolle:       { lat: 52.5168, lon: 6.0830 },
+  zoetermeer:   { lat: 52.0705, lon: 4.4928 },
+  helmond:      { lat: 51.4750, lon: 5.6558 },
+  venlo:        { lat: 51.3704, lon: 6.1724 },
+  hilversum:    { lat: 52.2292, lon: 5.1686 },
+  assen:        { lat: 52.9925, lon: 6.5640 },
+  middelburg:   { lat: 51.4988, lon: 3.6136 },
+  lelystad:     { lat: 52.5185, lon: 5.4714 },
+  emmen:        { lat: 52.7791, lon: 6.9009 },
+  zaanstreek:   { lat: 52.4390, lon: 4.8313 },
+  purmerend:    { lat: 52.5028, lon: 4.9572 },
+  nieuwegein:   { lat: 52.0296, lon: 5.0786 },
+  veenendaal:   { lat: 52.0261, lon: 5.5564 },
+  sneek:        { lat: 53.0382, lon: 5.6600 },
+};
+
+function geocodeLocationLocal(query) {
+  const q = (query || '').toLowerCase().replace(/[,]+/g, ' ').replace(/\s+/g, ' ').trim();
+  // Try city/area name match
+  const cityKey = Object.keys(CITY_COORDS_LOCAL).find(k => q.includes(k));
+  if (cityKey) return CITY_COORDS_LOCAL[cityKey];
+  // 4-digit Dutch postcode — return approximate centre of the Netherlands
+  if (/\b[1-9][0-9]{3}\b/.test(q)) return { lat: 52.1326, lon: 5.2913 };
+  return null;
+}
+
 function haversineKm(lat1, lon1, lat2, lon2) {
   const R = 6371;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
@@ -305,8 +434,12 @@ function normalizeSupermarketName(raw) {
 }
 
 async function geocodeLocation(query) {
+  // Try local lookup first — no API key needed
+  const local = geocodeLocationLocal(query);
+  if (local) return local;
+
   if (!OPENCAGE_API_KEY) {
-    throw new Error('OPENCAGE_API_KEY is not configured.');
+    throw new Error('Location not recognised. Try a Dutch city name (e.g. Amsterdam, Utrecht) or postcode.');
   }
 
   const url = new URL('https://api.opencagedata.com/geocode/v1/json');
@@ -366,6 +499,11 @@ async function runApifyActor(query, maxResults = 80) {
   );
 
   if (!runRes.ok) {
+    if (runRes.status === 403) {
+      throw new Error(
+        'Apify access denied. Check that APIFY_TOKEN is valid and your Apify account has access to this actor (or sufficient credits).',
+      );
+    }
     throw new Error(
       `Apify actor run failed with status ${runRes.status}`,
     );
@@ -927,7 +1065,7 @@ app.get('/api/compare', (req, res, next) => {
   try {
     const query =
       (req.query.q || '').toString().trim().toLowerCase() ||
-      'potato';
+      'aardappel';
     const radiusKm = Number(req.query.radiusKm) || 5;
 
     let lat = Number(req.query.lat);
@@ -948,20 +1086,27 @@ app.get('/api/compare', (req, res, next) => {
       lon = coords.lon;
     }
 
-    const items = await runApifyActor(query);
-    const summaries = summarisePricesFromApify(items, query);
-    if (!summaries.length) {
-      return res.status(404).json({
-        error:
-          'No supermarket prices found for this product in the Apify dataset.',
-      });
-    }
+    // Use demo pricing: resolve English alias → Dutch key, look up base price
+    const nlKey = EN_TO_NL_MAP[query] || query;
+    const priceInfo = DEMO_PRICES_BASE[nlKey] || DEMO_PRICES_BASE['aardappel'];
+
+    // Build one price summary per chain using per-chain price factors
+    const summaries = Object.entries(CHAIN_FACTORS).map(([chain, factor]) => ({
+      chain,
+      productName: nlKey,
+      query: nlKey,
+      price: Math.round(priceInfo.base * factor * 100) / 100,
+      unitPrice: null,
+      unit: priceInfo.unit,
+      unitSize: null,
+      url: null,
+    }));
 
     const results = buildNearbyResults(summaries, lat, lon, radiusKm);
     if (!results.length) {
       return res.status(404).json({
         error:
-          'No nearby supermarkets with this product found within the selected radius.',
+          'No nearby supermarkets found within the selected radius. Try a larger radius.',
       });
     }
 
@@ -969,11 +1114,7 @@ app.get('/api/compare', (req, res, next) => {
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error(err);
-    res.status(500).json({
-      error:
-        err.message ||
-        'Unexpected error while fetching supermarket prices.',
-    });
+    res.status(500).json({ error: err.message || 'Unexpected error while fetching supermarket prices.' });
   }
 });
 
