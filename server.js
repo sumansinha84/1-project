@@ -106,13 +106,13 @@ if (db) {
 }
 app.use(cors());
 app.use(express.json());
-// Serve app at root (local dev; on Vercel, public/index.html is served for /)
-if (!isVercel) {
-  app.get('/', (_req, res) => {
-    res.sendFile(path.join(__dirname, 'landing.html'));
-  });
-  app.use(express.static(path.join(__dirname)));
-}
+// Serve static files from public/ in all environments.
+// On Vercel all requests are routed through this Express app,
+// so it must handle static assets itself.
+app.use(express.static(path.join(__dirname, 'public')));
+app.get('/', (_req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
 const PORT = process.env.PORT || 4000;
 const OPENCAGE_API_KEY = process.env.OPENCAGE_API_KEY;
