@@ -877,8 +877,9 @@
 
         <!-- Step 2: enter 6-digit code -->
         <div id="login-step-code" style="display:none;">
-          <div style="background:var(--grocery-green-bg);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:var(--grocery-text-muted);">
-            Code sent to <strong id="login-email-display" style="color:var(--grocery-text);"></strong>. Check your inbox (and spam folder).
+          <div id="login-code-info" style="background:var(--grocery-green-bg);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:var(--grocery-text-muted);">
+            Code sent to <strong id="login-email-display" style="color:var(--grocery-text);"></strong>.<br/>
+            <span id="login-code-hint" style="color:var(--grocery-text-muted);">Check your inbox (and spam folder).</span>
           </div>
           <label for="login-code" style="font-size:11px;font-weight:700;color:var(--grocery-text-muted);display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:.06em;">6-digit code</label>
           <input type="text" id="login-code" placeholder="000000" maxlength="6"
@@ -4013,15 +4014,8 @@
           .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
           .then(function(o) {
             if (o.ok) {
-              // If backend returns the code (demo mode), show it so user can log in without email.
-              if (o.data && o.data.code) {
-                statusEl.textContent = (o.data.message || 'Use this code to log in:') +
-                  ' Code: ' + (o.data.code || '').replace(/(.{3})/g, '$1 ').trim();
-              } else {
-                statusEl.textContent = o.data.message || 'Code sent! Check your inbox.';
-              }
-              statusEl.style.color = 'var(--grocery-green)';
-              if (onOk) onOk();
+              statusEl.textContent = '';
+              if (onOk) onOk(o.data);
             } else {
               statusEl.textContent = (o.data && o.data.error) || 'Failed to send code. Please try again.';
               statusEl.style.color = '#b91c1c';
@@ -4037,12 +4031,22 @@
         document.getElementById('login-send-code-btn').addEventListener('click', function() {
           var email    = document.getElementById('login-email').value.trim().toLowerCase();
           var statusEl = document.getElementById('login-email-status');
-          doSendCode(email, statusEl, function() {
+          doSendCode(email, statusEl, function(data) {
             document.getElementById('login-email-display').textContent = email;
             document.getElementById('login-step-email').style.display = 'none';
             document.getElementById('login-step-code').style.display  = 'block';
             document.getElementById('login-code').value = '';
             document.getElementById('login-code-status').textContent  = '';
+            // If backend returned the code (demo/no-SMTP mode), display it prominently
+            var hintEl = document.getElementById('login-code-hint');
+            if (data && data.code) {
+              hintEl.innerHTML = '📋 Your code: <strong style="font-size:20px;letter-spacing:4px;color:var(--grocery-text);">' +
+                data.code + '</strong> — enter it below.';
+              document.getElementById('login-code-info').style.background = '#fef9c3';
+            } else {
+              hintEl.textContent = 'Check your inbox (and spam folder).';
+              document.getElementById('login-code-info').style.background = '';
+            }
             setTimeout(function() { document.getElementById('login-code').focus(); }, 80);
           });
         });
@@ -4055,8 +4059,16 @@
         document.getElementById('login-resend-code-btn').addEventListener('click', function() {
           var email    = document.getElementById('login-email-display').textContent;
           var statusEl = document.getElementById('login-code-status');
-          statusEl.textContent = '';
-          doSendCode(email, statusEl, null);
+          statusEl.textContent = 'Resending…';
+          doSendCode(email, statusEl, function(data) {
+            var hintEl = document.getElementById('login-code-hint');
+            if (data && data.code) {
+              hintEl.innerHTML = '📋 New code: <strong style="font-size:20px;letter-spacing:4px;color:var(--grocery-text);">' +
+                data.code + '</strong> — enter it below.';
+              document.getElementById('login-code-info').style.background = '#fef9c3';
+            }
+            statusEl.textContent = '';
+          });
         });
 
         /* ── Back to email ── */
